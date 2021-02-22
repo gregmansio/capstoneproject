@@ -13,12 +13,15 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This document contains a summary of the creation of a movie recommendation algorithm developed in R.
 It uses a comprehensive database of 10 million entries, gathering thousands of users and movies.
-I'll provide you first with the database summary statistics, then with the machine learning design, before finally moving to the outcomes of my work. 
+I'll provide you first with the database presentation, then with the machine learning design, before finally moving to the outcomes of my work. 
 
 ## Database
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
+The original database can be found here https://grouplens.org/datasets/movielens/. I am making use of the '10M' version.
+The full table is divided into 3 subparts. The first and second parts are the 'train set' and the 'test set' - and they form what I call the "Usable set" -. They are respectively gathering 7.2 and 1.8 million entries and will both be extensively used to 'train' (find prediction patterns) and 'test' our algorithm (compare 'trained' predictions with observed 'test' data).
+The third subpart, the 'validation' set, is composed of the remainder of the data (1 million entries) and will be used only ONCE when eventually measuring the precision of our final and last algorithm. Indeed, for evaluation purposes, such a set is required in order to put our algorithm to work in a "one-shot" application, with data/information it hasn't encountered yet.
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+The "Usable set" (7.2 + 1.8 = 9 Million) comprehends ratings given by 69878
+users about 10677 movies. Ratings range from 0.5 to 5 stars, with a mean of 3.51 stars overall.
+
