@@ -11,6 +11,9 @@ if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.
 library(tidyverse)
 library(caret)
 library(data.table)
+library(knitr)
+library(lubridate)
+library(rmarkdown)
 
 # MovieLens 10M dataset:
 # https://grouplens.org/datasets/movielens/10m/
@@ -50,7 +53,25 @@ edx <- rbind(edx, removed)
 
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
+# Mutate Date variable
+edx <- mutate(edx, date = as_datetime(timestamp))
+
 # Split edx in train and test sets
 test_index <- createDataPartition(y = edx$rating, p = 0.2, times = 1, list = FALSE)
 train_set <- edx[-test_index]
 test_set <- edx[test_index]
+
+# Average rating
+avg <- mean(train_set$rating)
+
+# Average rating by movie
+avg_mov <- train_set %>% group_by(movieId) %>% summarize(bi = mean(rating - avg))
+
+# Average rating by user
+avg_usr <- train_set %>% group_by(userId) %>% summarize(bu = mean(rating - avg))
+
+# Average rating by date
+avg_date <- train_set %>% group_by(date) %>% summarize(bd = mean(rating -avg))
+fit_date <- loess(rating ~ date, degree = 2, span = span, data=train_set)
+# Average rating by genre
+avg_genre <- train_set %>% group_by()
