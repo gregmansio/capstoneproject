@@ -53,25 +53,69 @@ edx <- rbind(edx, removed)
 
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
-# Mutate Date variable
-edx <- mutate(edx, date = as_datetime(timestamp))
 
 # Split edx in train and test sets
 test_index <- createDataPartition(y = edx$rating, p = 0.2, times = 1, list = FALSE)
 train_set <- edx[-test_index]
 test_set <- edx[test_index]
+rm(test_index)
+
+# Remove movies that are only in one of the two sets
+
+test_set <- test_set[test_set$movieId %in% train_set$movieId]
 
 # Average rating
 avg <- mean(train_set$rating)
 
+# Basic - RMSE
+avg_rmse <- RMSE(test_set$rating, avg)
+
 # Average rating by movie
 avg_mov <- train_set %>% group_by(movieId) %>% summarize(bi = mean(rating - avg))
+
+# Movie - RMSE
+mov_pred <- avg + test_set %>%
+  left_join(avg_mov, by='movieId') %>%
+  pull(bi)
+mov_rmse <- RMSE(mov_pred, test_set$rating)
 
 # Average rating by user
 avg_usr <- train_set %>% group_by(userId) %>% summarize(bu = mean(rating - avg))
 
-# Average rating by date
-avg_date <- train_set %>% group_by(date) %>% summarize(bd = mean(rating -avg))
-fit_date <- loess(rating ~ date, degree = 2, span = span, data=train_set)
+# Date loess smoothing
+Smooth_date_day <- train_set %>% mutate(dateday = as.numeric(round_date(as_datetime(timestamp), "day"))) %>%
+                    group_by(dateday) %>%
+                    summarize(avg_rating_day = mean(rating)) %>%
+                    loess(formula = avg_rating_day ~ dateday) %>%
+                    .$fitted
+avg_day = Smooth_date_day - avg - 
+
 # Average rating by genre
-avg_genre <- train_set %>% group_by()
+# Read genre then spread
+
+genre_effect <- train_set %>% 
+  separate_rows(genres, sep = "\\|") %>% 
+  group_by(genres) %>%
+  summarize(avg_rate_genre = mean(rating) - avg - avg_mov$bi - avg_usr$bu)
+
+# RMSE results
+#
+#
+#
+#
+
+#usr_pred <- avg + test_set %>%
+#  left_join(avg_usr, by='userId') %>%
+# pull(bu
+#usr_rmse <- RMSE(usr_pred, test_set$rating)#
+
+#usr_mov_pred <- test_set %>%
+#  left_join(avg_mov, by='movieId') %>%
+#  left_join(avg_usr, by='userId') %>%
+#  mutate(pred= avg + bi + bu) %>%
+#  pull(pred)
+#usr_mov_rmse <- RMSE(usr_mov_pred, test_set$rating)
+
+
+#rmse_results <- tibble(method = "Basic average", RMSE = avg)
+#rmse_results <- 
