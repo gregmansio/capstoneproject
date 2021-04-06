@@ -60,9 +60,39 @@ train_set <- edx[-test_index]
 test_set <- edx[test_index]
 rm(test_index)
 
-# Remove movies that are only in one of the two sets
+# New date variable, First step: finding the best grouping by looking at graphs
+train_set %>%
+  mutate(daily = as.numeric(round_date(as_datetime(timestamp), "day"))) %>%
+  group_by(daily) %>%
+  summarize(rating = mean(rating)) %>%
+  ggplot(aes(daily, rating)) +
+  geom_point() +
+  geom_smooth()
 
+train_set %>%
+  mutate(weekly = as.numeric(round_date(as_datetime(timestamp), "week"))) %>%
+  group_by(weekly) %>%
+  summarize(rating = mean(rating)) %>%
+  ggplot(aes(weekly, rating)) +
+  geom_point() +
+  geom_smooth()
+
+train_set %>%
+  mutate(monthly = as.numeric(round_date(as_datetime(timestamp), "month"))) %>%
+  group_by(monthly) %>%
+  summarize(rating = mean(rating)) %>%
+  ggplot(aes(monthly, rating)) +
+  geom_point() +
+  geom_smooth()
+
+# New date variable, Second step: creating the new date varaible in both datasets
+
+test_set <- test_set %>% mutate(monthly = as.numeric(round_date(as_datetime(timestamp), "month")))
+train_set <- train_set %>% mutate(monthly = as.numeric(round_date(as_datetime(timestamp), "month")))
+
+# Remove movies and dates that are only in one of the two sets
 test_set <- test_set[test_set$movieId %in% train_set$movieId]
+test_set <- test_set[test_set$monthly %in% train_set$monthly]
 
 # Average rating
 avg <- mean(train_set$rating)
@@ -70,8 +100,10 @@ avg <- mean(train_set$rating)
 # Basic - RMSE
 avg_rmse <- RMSE(test_set$rating, avg)
 
-# Average rating by movie
-avg_mov <- train_set %>% group_by(movieId) %>% summarize(bi = mean(rating - avg))
+# Movie effect
+avg_mov <- train_set %>% 
+  group_by(movieId) %>% 
+  summarize(bi = mean(rating - avg))
 
 # Movie - RMSE
 mov_pred <- avg + test_set %>%
@@ -79,43 +111,77 @@ mov_pred <- avg + test_set %>%
   pull(bi)
 mov_rmse <- RMSE(mov_pred, test_set$rating)
 
-# Average rating by user
-avg_usr <- train_set %>% group_by(userId) %>% summarize(bu = mean(rating - avg))
+# User effect (ajusted for movie effect)
+avg_usr <- train_set %>% 
+  left_join(avg_mov, by='movieId') %>%
+  group_by(userId) %>% 
+  summarize(bu = mean(rating - avg - bi))
 
-# Date loess smoothing
-Smooth_date_day <- train_set %>% mutate(dateday = as.numeric(round_date(as_datetime(timestamp), "day"))) %>%
-                    group_by(dateday) %>%
-                    summarize(avg_rating_day = mean(rating)) %>%
-                    loess(formula = avg_rating_day ~ dateday) %>%
-                    .$fitted
-avg_day = Smooth_date_day - avg - 
+# Movie & User - RMSE
+usr_mov_pred <- test_set %>%
+  left_join(avg_mov, by='movieId') %>%
+  left_join(avg_usr, by='userId') %>%
+  mutate(pred = avg + bi + bu) %>%
+  .$pred
+usr_mov_rmse <- RMSE(usr_mov_pred, test_set$rating)
 
-# Average rating by genre
-# Read genre then spread
+# Date effect (ajusted for movie and user effects)
+monthly <-  train_set %>% 
+              left_join(avg_usr, by='userId') %>%
+              left_join(avg_mov, by='movieId') %>%
+              group_by(monthly) %>%
+              summarize(bd = mean(rating - avg - bi - bu)) %>%
+              loess(formula = bd ~ monthly) %>%
+              .$x
+monthly <- c(monthly)
 
-genre_effect <- train_set %>% 
+monthly_beta <- train_set %>% 
+              left_join(avg_usr, by='userId') %>%
+              left_join(avg_mov, by='movieId') %>%
+              group_by(monthly) %>%
+              summarize(bd = mean(rating - avg - bi - bu)) %>%
+              loess(formula = bd ~ monthly) %>%
+              .$fitted
+
+date_effect <- tibble(monthly, monthly_beta)
+date_effect <- rename(date_effect, bd = monthly_beta)                 
+  
+# Movie, User & Date - RMSE
+date_usr_mov_pred <- test_set %>%
+  left_join(avg_usr, by='userId') %>%
+  left_join(avg_mov, by='movieId') %>%
+  left_join(date_effect, by='monthly', copy=TRUE) %>%
+  mutate(pred = avg + bi + bu + bd) %>%
+  .$pred
+
+date_usr_mov_rmse <- RMSE(date_usr_mov_pred, test_set$rating)
+
+
+# Genre effect (adjusted for Movie and User - Date effect dropped)
+avg_genre <- train_set %>% 
   separate_rows(genres, sep = "\\|") %>% 
+  left_join(avg_mov, by='movieId') %>%
+  left_join(avg_usr, by='userId') %>%
   group_by(genres) %>%
-  summarize(avg_rate_genre = mean(rating) - avg - avg_mov$bi - avg_usr$bu)
+  summarize(avg_rating_genre = mean(rating  - avg - bi - bu))
+
+#genre_effect <- train_set %>%
+#  separate_rows(genres, sep = "\\|") %>%
+#  left_join(x=.,y=avg_genre, by='genres') %>%
+#  ungroup() %>%
+#  group_by(movieId) %>%
+#  summarize(bg = mean(avg_rating_genre))
+
+# Genre User Movie - RMSE 
+#genre_usr_mov_pred <- test_set %>%
+#  left_join(avg_usr, by='userId') %>%
+#  left_join(avg_mov, by='movieId') %>%
+#  left_join(genre_effect, by='movieId', copy=TRUE) %>%
+#  mutate(pred = avg + bi + bu + bg) %>%
+# .$pred
+
+#genre_usr_mov_rmse <- RMSE(genre_usr_mov_pred, test_set$rating)
 
 # RMSE results
-#
-#
-#
-#
-
-#usr_pred <- avg + test_set %>%
-#  left_join(avg_usr, by='userId') %>%
-# pull(bu
-#usr_rmse <- RMSE(usr_pred, test_set$rating)#
-
-#usr_mov_pred <- test_set %>%
-#  left_join(avg_mov, by='movieId') %>%
-#  left_join(avg_usr, by='userId') %>%
-#  mutate(pred= avg + bi + bu) %>%
-#  pull(pred)
-#usr_mov_rmse <- RMSE(usr_mov_pred, test_set$rating)
-
-
 #rmse_results <- tibble(method = "Basic average", RMSE = avg)
 #rmse_results <- 
