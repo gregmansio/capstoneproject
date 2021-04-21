@@ -13,15 +13,153 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This document contains a summary of the creation of a movie recommendation algorithm developed in R.
 It uses a comprehensive database of 10 million entries, gathering thousands of users and movies.
-I'll provide you first with the database presentation, then with the machine learning design, before finally moving to the outcomes of my work. 
+We will provide you first with the database presentation, then with the machine learning design, before finally moving to the outcomes of my work. 
+
 
 ## Database
 
 The original database can be found here https://grouplens.org/datasets/movielens/. I am making use of the '10M' version.
 The full table is divided into 3 subparts. The first and second parts are the 'train set' and the 'test set' - and they form what I call the "Usable set" -. They are respectively gathering 7.2 and 1.8 million entries and will both be extensively used to 'train' (find prediction patterns) and 'test' our algorithm (compare 'trained' predictions with observed 'test' data).
-The third subpart, the 'validation' set, is composed of the remainder of the data (1 million entries) and will be used only ONCE when eventually measuring the precision of our final and last algorithm. Indeed, for evaluation purposes, such a set is required in order to put our algorithm to work in a "one-shot" application, with data/information it hasn't encountered yet.
+The third subpart, the 'validation' set, is composed of the remainder of the data (1 million entries) and will be used only ONCE when eventually measuring the precision of our final algorithm. Indeed, for evaluation purposes, such a set is required in order to put my algorithm to work in a "one-shot" application, with data/information it hasn't encountered yet.
 
 
 The "Usable set" (7.2 + 1.8 = 9 Million) comprehends ratings given by 69878
 users about 10677 movies. Ratings range from 0.5 to 5 stars, with a mean of 3.51 stars overall.
 
+Besides the user-identifier variable (userId), and the movie identifier (movieId), I also have at my disposal a time variable (timestamp) and a genre variable that I will use to potentially obtain a finer prediction precision.
+
+Let me now present you the algorithm design.
+
+
+## Algorithm - 'Computing effects'
+# First remarks, and general idea
+
+Putting aside the first database creation steps, I want to underline that due to limited computing capacity (8Go RAM), I had to remove unused sets (like the validation set) and also unused variables (like the movie title), as well as grouping as much as possible and deleting double information in order to be able to apply the techniques I wanted. 
+
+For example, after having tried to include a date effect, the RMSE obtained was inconclusive, so I decided to delete the 'timestamp' variable from train and test sets to make things lighter. Still, you can see the code (as comments) referring to the operations on the date variable.
+
+```{r Representation of the date effect on rating, by week, echo=FALSE}
+train_set %>%
+  mutate(weekly = as.numeric(round_date(as_datetime(timestamp), "week"))) %>%
+  group_by(weekly) %>%
+  summarize(rating = mean(rating)) %>%
+  ggplot(aes(weekly, rating)) +
+  geom_point() +
+  geom_smooth()
+```
+
+
+The general idea is to build an algorithm step by step, each step providing a superior degree of precision to the model. 
+
+Because the dataset is so big, we are not able to use the caret package to make the software compute a linear regression with the standard lm() function. The idea is therefore to approximate the result of such a regression, by taking a given observation (a rating by user u to movie i), substracting the overall average (3.51), and then recursively substracting other elements that can explain the difference between this given observation and the other ones.
+
+The first model is called a movie effect model, and only takes into account the average, and the average rating given to this particular movie by all users.
+
+```{r Movie effect: bi}
+avg_mov <- train_set %>% 
+  group_by(movieId) %>% 
+  summarize(bi = mean(rating - avg))
+```
+
+'bi' captures the difference in the average rating of movie i compared to the overall average rating. Because there are 10641 different movies in the dataset, there are 10641 different bi.
+
+The same applies for the user effect.
+I am computing the average rating given by a user to all the movies he has rated, and also use this as a potential effect in the observed rating.
+
+```{r User Movie effect: bu}
+avg_usr <- train_set %>% 
+  left_join(avg_mov, by='movieId') %>%
+  group_by(userId) %>% 
+  summarize(bu = mean(rating - avg - bi))
+```
+
+Note something, I am recursively adding the desired effects, meaning that 'bi' is taken into account when computing 'bu', so I am sure the two effects don't overlap and overestimate the difference when both 'bi' and 'bu' are used to compute the RMSE. If you do not do so and compute 'bu' like this: 
+
+```{r}
+ bu = mean(rating - avg)
+```
+you would attribute all the difference (between rating and avg) to the user effect, when you know that there is a movie effect. 
+In other words, you want to include 'bi' in the computation of the difference, so you are capturing a user effect on what is left after you have corrected for the movie effect. 
+
+The same idea apllies to the third and final model, which includes a genre effect.
+I have first separated every observation (i.e. every line) in several lines, each new one corresponding to a genre the movie has. For example, a movie with three genres (Action | Aventure | Thriller) in the initial 'genres' variable will now be spread on three lines, and will only comprehend a single genre in the genre variable. Then, by grouping by genre, we are able to individualy extract the effect of a given genre to the observed rating.
+
+Because a given movie always has the same genre combination, I am able to reduce the genre_effect to 10641, the number of different movies.
+
+
+We now have four models, and a computed RMSE for each of them.
+But it is possible to go further by performing a regularization on those models. (Note than we won't do it on the basic average model which actually isn't a model but just an observed average).
+
+The idea of regularization is to penalize the weight of movies that have only been rated a very small number of times, as well as the rating given by users that have only given their feedback a few number of times.
+
+Here you can find the Movie + User + Genre regularized model:
+
+```{r Movie + User + Genre regularized model}
+lambdaz <- seq(0,40,0.25)
+genre_usr_mov_rmse2 <- sapply(lambdaz, function(y){
+
+   avg2_mov <- train_set %>%
+    group_by(movieId) %>%
+    mutate(bi_sum = sum(rating - avg), n_i=n()) %>%
+    summarize(bi_final = bi_sum/(n_i+y))
+   avg2_mov <- avg2_mov %>% 
+     select(movieId, bi_final) %>% 
+     group_by(movieId) %>% 
+     unique(by='movieId') %>% 
+     as.data.frame()
+   
+   avg2_usr <- train_set %>%
+    left_join(avg2_mov, by='movieId') %>%
+    group_by(userId) %>%
+    mutate(bu_sum = sum(rating - avg - bi_final), n_u=n()) %>%
+    summarize(bu_final = bu_sum/(n_u+y))
+   avg2_usr <- avg2_usr %>% 
+     select(userId, bu_final) %>% 
+     group_by(userId) %>% 
+     unique(by='userId') %>%
+     as.data.frame()
+   
+   genre_usr_mov_pred2 <- test_set %>%
+    left_join(avg2_mov, by='movieId') %>%
+    left_join(avg2_usr, by='userId') %>%
+    left_join(genre_effect, by='movieId') %>%
+    mutate(pred = avg + bi_final + bu_final + bg) %>%
+    .$pred
+  return(RMSE(genre_usr_mov_pred2, test_set$rating))
+})
+```
+
+What is important to notice in this complicated chunk of code is the computation of 'bi_final' and 'bu_final'. We had a 'y' term to the calculus of the average, which penalizes movies that have been rated only a very few number of times, by shrinking their average a bit more than observed. It is not 'fair' that a movie rated 5 stars but only appearing twice in the database, has the same impact in the model than a movie rated 5 stars a hundred times. Same goes for users. 
+Note that for the genre_effect ('bg'), I am not doing any regularization, as it is very unlikely that a genre combination only appears once or twice in the dataset.
+
+## RMSE and Conclusive remarks
+
+We have computed a total of 7 models and their corresponding RMSEs.
+
+```{r RMSEs table, echo=FALSE}
+rmse_results <- tibble(method = "Basic average model", RMSE = avg_rmse)
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie effect model", RMSE= mov_rmse))
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie regularized model", RMSE= mov_rmse_final))
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User model", RMSE= usr_mov_rmse))
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User regularized model", RMSE= usr_mov_rmse_final))
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User + Genre  model", RMSE= genre_usr_mov_rmse))
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User + Genre regularized model", RMSE= genre_usr_mov_rmse_final))
+rmse_results %>% knitr::kable()
+
+```
+
+It is clear how each model refinement improves the RMSE. There is a progression in the movie, movie + user, movie + user + genre models, as well as another improvement to each of them when regularizing.
+Eventually, the best model is the last one, which includes Movie and User regularized variables, and the genre effect.
+
+As visible in the script, I perform the last operation of the project, which is to test the final model on the validation set.
+After loading it back in the environment, I perform a quick check to see whether or not every movie and users in the validation set have a match in the train_set. 8 observations are removed thanks to this operation.
+
+Here you can find the result of the RMSE computation on the validation set.
+
+```{r Validation RMSE, echo=FALSE}
+rmse_results <- bind_rows(rmse_results, data_frame(method="Final model on Validation set", RMSE= Validation_RMSE))
+> rmse_results %>% knitr::kable()
+```
+With a RMSE of 0.86558, the final model can be considered quite good even if some improvements could be made. For example, on purpose, I used lambda = 4.5 to compute the Validation_RMSE, when I could have tried to tune it in a finer way, like I did with the test_set. I could have ended-up with another lambda, improving our precision even more.
+Similarly, maybe there is a movie which holds a unique genre combination, and I did not regularized the genre_effect, so an improvement might have happened here as well.
+Finally, about the date_effect, a 

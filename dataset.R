@@ -95,13 +95,13 @@ rm(validation)
 #  geom_point() +
 #  geom_smooth()
 
-#train_set %>%
-#  mutate(weekly = as.numeric(round_date(as_datetime(timestamp), "week"))) %>%
-#  group_by(weekly) %>%
-#  summarize(rating = mean(rating)) %>%
-#  ggplot(aes(weekly, rating)) +
-#  geom_point() +
-#  geom_smooth()
+train_set %>%
+  mutate(weekly = as.numeric(round_date(as_datetime(timestamp), "week"))) %>%
+  group_by(weekly) %>%
+  summarize(rating = mean(rating)) %>%
+  ggplot(aes(weekly, rating)) +
+  geom_point() +
+  geom_smooth()
 
 #train_set %>%
 #  mutate(monthly = as.numeric(round_date(as_datetime(timestamp), "month"))) %>%
@@ -235,13 +235,6 @@ genre_usr_mov_pred <- test_set %>%
 genre_usr_mov_pred <- genre_usr_mov_pred %>%
   select(pred)
 genre_usr_mov_rmse <- RMSE(genre_usr_mov_pred$pred, test_set$rating)
-
-# RMSE results
-rmse_results <- tibble(method = "Basic average model", RMSE = avg_rmse)
-rmse_results <- bind_rows(rmse_results, data_frame(method="Movie effect model", RMSE= mov_rmse))
-rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User effect model", RMSE= usr_mov_rmse))
-rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User + Genre effect model", RMSE= genre_usr_mov_rmse))
-rmse_results %>% knitr::kable()
 
 
 ##########################################################
@@ -433,8 +426,99 @@ RMSE(genre_usr_mov_pred_final, test_set$rating)
 # RMSE results table
 ##########################################################
 
+# RMSE results
+rmse_results <- tibble(method = "Basic average model", RMSE = avg_rmse)
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie effect model", RMSE= mov_rmse))
 rmse_results <- bind_rows(rmse_results, data_frame(method="Movie regularized model", RMSE= mov_rmse_final))
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User model", RMSE= usr_mov_rmse))
 rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User regularized model", RMSE= usr_mov_rmse_final))
+rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User + Genre  model", RMSE= genre_usr_mov_rmse))
 rmse_results <- bind_rows(rmse_results, data_frame(method="Movie + User + Genre regularized model", RMSE= genre_usr_mov_rmse_final))
 rmse_results %>% knitr::kable()
 
+
+
+##########################################################
+# Validation step
+##########################################################
+
+load("C:/Users/Gregoire/Desktop/R/EDX formation/Capstone/capstoneproject/validation.RData")
+validation <- validation %>% 
+  select(userId, movieId, rating) %>% 
+  as.data.frame()
+
+# Make sure every movie and users are present in train and validation datasets so we don't endup with NA
+validation <- validation %>% 
+  semi_join(train_set, by = "movieId") %>%
+  semi_join(train_set, by = "userId")
+
+
+lambda_final <- seq(0,10,0.25)
+Validation_RMSE <- sapply(lambda_final, function(y){
+  
+  avg2_mov <- train_set %>%
+    group_by(movieId) %>%
+    mutate(bi_sum = sum(rating - avg), n_i=n()) %>%
+    summarize(bi_final = bi_sum/(n_i+y))
+  avg2_mov <- avg2_mov %>% 
+    select(movieId, bi_final) %>% 
+    group_by(movieId) %>% 
+    unique(by='movieId') %>% 
+    as.data.frame()
+  
+  avg2_usr <- train_set %>%
+    left_join(avg2_mov, by='movieId') %>%
+    group_by(userId) %>%
+    mutate(bu_sum = sum(rating - avg - bi_final), n_u=n()) %>%
+    summarize(bu_final = bu_sum/(n_u+y))
+  avg2_usr <- avg2_usr %>% 
+    select(userId, bu_final) %>% 
+    group_by(userId) %>% 
+    unique(by='userId') %>%
+    as.data.frame()
+  
+  validation_pred <- validation %>%
+    left_join(avg2_mov, by='movieId') %>%
+    left_join(avg2_usr, by='userId') %>%
+    left_join(genre_effect, by='movieId') %>%
+    mutate(pred = avg + bi_final + bu_final + bg) %>%
+    .$pred
+  RMSE(validation_pred, validation$rating)
+})
+
+qplot(lambda_final, Validation_RMSE)
+lambda_final[which.min(Validation_RMSE)]
+
+# Best lambda = 5 - Final RMSE
+best_lambda <- 5
+Validation_RMSE <- sapply(best_lambda, function(y){
+  
+  avg2_mov <- train_set %>%
+    group_by(movieId) %>%
+    mutate(bi_sum = sum(rating - avg), n_i=n()) %>%
+    summarize(bi_final = bi_sum/(n_i+y))
+  avg2_mov <- avg2_mov %>% 
+    select(movieId, bi_final) %>% 
+    group_by(movieId) %>% 
+    unique(by='movieId') %>% 
+    as.data.frame()
+  
+  avg2_usr <- train_set %>%
+    left_join(avg2_mov, by='movieId') %>%
+    group_by(userId) %>%
+    mutate(bu_sum = sum(rating - avg - bi_final), n_u=n()) %>%
+    summarize(bu_final = bu_sum/(n_u+y))
+  avg2_usr <- avg2_usr %>% 
+    select(userId, bu_final) %>% 
+    group_by(userId) %>% 
+    unique(by='userId') %>%
+    as.data.frame()
+  
+  validation_pred <- validation %>%
+    left_join(avg2_mov, by='movieId') %>%
+    left_join(avg2_usr, by='userId') %>%
+    left_join(genre_effect, by='movieId') %>%
+    mutate(pred = avg + bi_final + bu_final + bg) %>%
+    .$pred
+  RMSE(validation_pred, validation$rating)
+})
