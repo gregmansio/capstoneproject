@@ -97,17 +97,19 @@ train_set <- train_set %>%
 test_set <- test_set %>%
   select(userId, movieId, rating, genres, timestamp, age_rating)
 
-save.image("C:/Users/Gregoire/Desktop/R/EDX formation/Capstone/capstoneproject/movielens.RData")
+save.image("~/movielens.RData")
 rm(train_set, test_set)
-save.image("C:/Users/Gregoire/Desktop/R/EDX formation/Capstone/capstoneproject/validation.RData")
+save.image("~/validation.RData")
 
 
 ##########################################################
 # Computing effects
 ##########################################################
-gc()
-load("C:/Users/Gregoire/Desktop/R/EDX formation/Capstone/capstoneproject/movielens.RData")
+
+
+load("~/movielens.RData")
 rm(validation)
+gc() #garbage collection command helps in freeing unused RAM - will be used several times in the script
 
 # Average rating
 avg <- mean(train_set$rating)
@@ -140,7 +142,18 @@ usr_mov_pred <- test_set %>%
   .$pred
 usr_mov_rmse <- RMSE(usr_mov_pred, test_set$rating)
 
-# Pure date effect being unsignificant, delete timestamp variable for RAM saving
+# Exploration to graphically see a possible date_effect
+weekly_graph <- train_set %>%
+                  mutate(weekly = as.numeric(round_date(as_datetime(timestamp), "week"))) %>%
+                  group_by(weekly) %>%
+                  summarize(rating = mean(rating)) %>%
+                  ggplot(aes(weekly, rating)) +
+                  geom_point() +
+                  geom_smooth()
+# Graph available in the report
+
+# Pure date effect being unsignificant (RMSE higher), delete timestamp variable for RAM saving
+# see calculation in "Abandonned strategies"
 train_set <- train_set %>%
   select(-timestamp)
 test_set <- test_set %>%
@@ -160,6 +173,8 @@ age_plot <- ggplot(data = age_grp, aes(age_rating, age_avg)) +
             ylab("Rating") +
             ggtitle("Movie rating against age when rated")
 print(age_plot)
+
+# Graph available in report
 
 # Effect becomes questionable after 50 years. Filtering out massive age gaps between movie release and rating
 age_grp <- age_grp %>%
@@ -298,7 +313,7 @@ mov_rmse_final <- sapply(1.75, function(y){
 })
 
 
-# User and Movie regularized model - without Genre
+# Next model: User and Movie regularized model - without Genre
 lambda <- seq(0,10,0.25)
 usr_mov_rmse_reg <- sapply(lambda, function(y){
   
@@ -337,7 +352,7 @@ lambda[which.min(usr_mov_rmse_reg)]
 
 
 
-# RMSE - Best User & Movie regularized model (without genre) - Lambda = 4.75
+# RMSE - Best User & Movie regularized model - Lambda = 4.75
 usr_mov_rmse_final <- sapply(4.75, function(y){
   
   avg_mov_reg <- train_set %>%
@@ -372,7 +387,7 @@ usr_mov_rmse_final <- sapply(4.75, function(y){
 })
 
 # Regularized User, Movie and Genre model
-# We will use the mix_genre effect which returned better RMSE
+# We will use the mix_genre effect which returned better RMSE 
 lambda <- seq(0,10,0.25)
 genre_mix_usr_mov_age_rmse2 <- sapply(lambda, function(y){
 
@@ -423,7 +438,7 @@ genre_mix_usr_mov_age_rmse2 <- sapply(lambda, function(y){
 qplot(lambda, genre_mix_usr_mov_age_rmse2)
 lambda[which.min(genre_mix_usr_mov_age_rmse2)]
 
-#Best lambda = 4.75 - Returning corresponding RMSE
+# Best lambda = 4.75 - Returning corresponding RMSE
 genre_mix_usr_mov_age_rmse_final <- sapply(4.75, function(y){
   
   avg_mov_reg <- train_set %>%
@@ -493,18 +508,19 @@ gc()
 # Validation step
 ##########################################################
 
-load("C:/Users/Gregoire/Desktop/R/EDX formation/Capstone/capstoneproject/validation.RData")
+load("~/validation.RData")
 validation <- validation %>% 
   select(userId, movieId, rating, age_rating, genres) %>% 
   as.data.frame()
 
-# Make sure every movie and users are present in train and validation datasets so we don't endup with NA
+# Make sure every movie and users are present in train and validation datasets so we don't end-up with NA
 validation <- validation %>% 
   semi_join(train_set, by = "movieId") %>%
   semi_join(train_set, by = "userId") %>%
   semi_join(train_set, by = "age_rating")
 
 
+# The 'MUG²A reg' will be the model used as it's the best performing one on the test_set
 lambda <- seq(0,10,0.25)
 Validation_RMSE <- sapply(lambda, function(y){
   
@@ -602,6 +618,9 @@ Validation_RMSE <- sapply(best_lambda, function(y){
     .$pred
   RMSE(validation_pred, validation$rating)
 })
+
+print(Validation_RMSE) #final result
+save.image("~/final.RData")
 
 #########################################################
 # Abandonned strategies
