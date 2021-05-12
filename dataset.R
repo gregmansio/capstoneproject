@@ -8,7 +8,7 @@ if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.
 if(!require(knitr)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(lubridate)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(rmarkdown)) install.packages("data.table", repos = "http://cran.us.r-project.org")
-
+if(!require(tinytex)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 
 ##########################################################
 # Create edx set, validation set (final hold-out test set)
@@ -97,9 +97,9 @@ train_set <- train_set %>%
 test_set <- test_set %>%
   select(userId, movieId, rating, genres, timestamp, age_rating)
 
-save.image("~/movielens.RData")
+save.image("./movielens.RData")
 rm(train_set, test_set)
-save.image("~/validation.RData")
+save.image("./validation.RData")
 
 
 ##########################################################
@@ -107,7 +107,7 @@ save.image("~/validation.RData")
 ##########################################################
 
 
-load("~/movielens.RData")
+load("./movielens.RData")
 rm(validation)
 gc() #garbage collection command helps in freeing unused RAM - will be used several times in the script
 
@@ -144,12 +144,16 @@ usr_mov_rmse <- RMSE(usr_mov_pred, test_set$rating)
 
 # Exploration to graphically see a possible date_effect
 weekly_graph <- train_set %>%
-                  mutate(weekly = as.numeric(round_date(as_datetime(timestamp), "week"))) %>%
-                  group_by(weekly) %>%
-                  summarize(rating = mean(rating)) %>%
-                  ggplot(aes(weekly, rating)) +
+                  mutate(Weeks = as.numeric(round_date(as_datetime(timestamp), "week"))) %>%
+                  group_by(Weeks) %>%
+                  summarize(Rating = mean(rating)) %>%
+                  ggplot(aes(Weeks, Rating)) +
                   geom_point() +
-                  geom_smooth()
+                  geom_smooth(col='tomato2') +
+                  scale_x_discrete(labels = NULL, breaks = NULL) +
+                  xlab(label = "Time (by week)")
+                  
+
 # Graph available in the report
 
 # Pure date effect being unsignificant (RMSE higher), delete timestamp variable for RAM saving
@@ -167,11 +171,10 @@ age_grp <- train_set %>%
 
 age_plot <- ggplot(data = age_grp, aes(age_rating, age_avg)) +
             geom_point() +
-            geom_line(aes(y = avg), lty=2, col = 'blue') +
-            geom_text(aes(x = 60, y = 3.55), label = "Avg rating", size = 3) + 
+            geom_line(aes(y = avg), lty=2, col = 'tomato2') +
+            geom_text(aes(x = 50, y = 3.55), label = "Avg rating", size = 3) + 
             xlab("Age of movie when rated") +
-            ylab("Rating") +
-            ggtitle("Movie rating against age when rated")
+            ylab("Rating")
 print(age_plot)
 
 # Graph available in report
@@ -435,7 +438,7 @@ genre_mix_usr_mov_age_rmse2 <- sapply(lambda, function(y){
   return(RMSE(genre_mix_usr_mov_age_reg_pred, test_set$rating))
 })
 
-qplot(lambda, genre_mix_usr_mov_age_rmse2)
+lambdaMUGA2 <- qplot(lambda, genre_mix_usr_mov_age_rmse2, ylab = "RMSE", xlab = "Lambda")
 lambda[which.min(genre_mix_usr_mov_age_rmse2)]
 
 # Best lambda = 4.75 - Returning corresponding RMSE
@@ -508,7 +511,7 @@ gc()
 # Validation step
 ##########################################################
 
-load("~/validation.RData")
+load("./validation.RData")
 validation <- validation %>% 
   select(userId, movieId, rating, age_rating, genres) %>% 
   as.data.frame()
@@ -620,7 +623,7 @@ Validation_RMSE <- sapply(best_lambda, function(y){
 })
 
 print(Validation_RMSE) #final result
-save.image("~/final.RData")
+save.image("./final.RData")
 
 #########################################################
 # Abandonned strategies
