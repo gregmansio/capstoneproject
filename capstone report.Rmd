@@ -48,13 +48,14 @@ users about 10677 movies. Ratings range from 0.5 to 5 stars, with an average of 
 The different cleaning operations aren't numerous, because the database has already been very properly created by the movielens group. Still, some work had to be done in view of being assured that every movie, user, movie age, and genre mixture (4 of my 5 variables) exist in both the train_set and test_set when comparing predictions and results. The same applies between the train_set and the validation_set. When doing this comparison, observations (movie, user, and age of movie) present in only one of the two sets are deleted.
 
 Putting aside the first database creation steps, I want to underline that due to limited computing capacity (8Go RAM), I had to remove unused sets (like the validation set) and also unused variables, as well as grouping as much as possible and deleting double information in order to be able to apply the techniques I wanted. 
-For example, after having tried to include a date effect, the RMSE obtained was inconclusive, so I decided to delete the 'timestamp' variable from train and test sets to make things lighter. For illustrative purposes, at the very end of the script, you can see the code referring to the operations on the date variable and on other abandoned strategies.
-
+For example, after having tried to include a date effect, the RMSE obtained was inconclusive, so I decided to delete the 'timestamp' variable from train and test sets to make things lighter. You can see in the following graph the effect of time (grouped by week) on the rating. The slight curvature of the smoothed line is not significant when computing the estimator.
 
 
 ```{r Representation of the date effect on rating by week, echo=FALSE, message=FALSE}
 print(weekly_graph)
 ```
+
+For illustrative purposes, at the very end of the script, you can see other chunks of code referring to the operations on the date variable and on other abandoned strategies.
 
 
 ### Estimators
@@ -100,7 +101,7 @@ In other words, you want to include 'bi_final' in the computation of the differe
 For the genre effect, I first separate every observation (i.e. every row) in several rows, each new one corresponding to a unique genre the movie has. For example, a movie having three genres (Action | Aventure | Thriller) in the initial 'genres' variable will now be spread on three lines, and will only comprehend a single genre in the genre variable. Then, by grouping by 'genres', I am able to individually isolate the effect of a given genre on average.
 
 Another way of computing the 'genre' effect is simply to group_by() genres. This way, we do not capture the rating-power of each individual genre, but instead of each genre_mix. After doing so, we are left with 784 genre effects, representing 784 genres combinations.
-Note that this second way of taking into account the genre effect is less elegant more more effective in terms of final precision.
+Note that this second way of taking into account the genre effect is less elegant but more effective in terms of final precision.
 
 #### Age effect
 
@@ -128,7 +129,7 @@ The intuition behind is the unfairness that a movie averaging a 5 stars rating b
 
 As we aren't sure of the value 'y' should take, it is recommended to consider it a tuning parameter. This means we will try different values of this parameter, and keep the one leading to the best RMSE result. This operation is long, as the computer has to calculate as many models as number of y-values you want him to test. I computed the model for a sequence of y ranging from 0 to 10, with an increment of 0.25, leading to 41 possibles values for y, and therefore 41 RMSEs to estimate for each regularized model. As I regularized 3 models + the final model on the validation set, the computer calculated 164 models + the non-regularized one, making my script 1h08 to run on a modern laptop.
 
-You can find below a the plot of y-regularization (or lambda regularization) on the 'MUG²A reg' model. Note how the RMSE goes down around lambda = 4.75. 
+You can find below the plot of y-regularization (or lambda regularization) on the 'MUG²A reg' model. Note how the RMSE goes down around lambda = 4.75. 
 
 
 ```{r Lambda (y) tuning on MUG²A model, echo = FALSE}
@@ -161,7 +162,7 @@ validation_pred <- validation %>%
 ## Results
 
 I have computed a total of 8 models and their corresponding RMSEs. The table below summarizes the results of the different models, each row adding a superior degree of difficulty. Three interesting points are to bring forward.
-First, by looking at MU (Movie + User model) and MU reg (Movie + User regularized model), we se a huge step in precision, as the RMSE increases by almost 10%!
+First, by looking at MU (Movie + User model) and MU reg (Movie + User regularized model), we se a huge gap in precision, as the RMSE increases by almost 10% thanks to the regularization!
 Second, in terms of accuracy, it's even better to regularize the MU model than to add another estimator ('age'), as the non-regularized MUA model does not perform better than the MU reg. The same goes for the MUGA model (movie, user, age and genre) which also performs badly compared to the very simple MU reg.
 Third, about the genre effect. The elegant technique of trying to capture each individual genre effect and then reconstructing the prediction by adding those individual effects isn't very efficient. Indeed, the MUG²A genre_mix model is better performing than it's MUGA counter part.
 
