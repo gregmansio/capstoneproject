@@ -145,7 +145,7 @@ $$
 Rating = avg + b_i + b_u + b_a + b_g + \epsilon
 $$
 
-The idea is to add each estimator to the simple average, all of them computed thanks to the train_set, and then to compare this result (predicted rating) to the actual value observed in the test_set. 
+The idea is to add each estimator to the simple average, all of them computed thanks to the train_set, and then to compare this result (predicted "Rating") to the actual value observed in the test_set. 
 
 For illustrative purpose, here is the code used to perform this comparison.
 
