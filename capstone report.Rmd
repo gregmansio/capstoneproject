@@ -141,6 +141,10 @@ print(lambdaMUGA2)
 
 Following the creation of each estimator, I tested the same modeling design at almost every step. It is based on linear regression with a standard mathematical formula for this kind of technique. 
 
+$$
+Rating = avg + b_i + b_u + b_a + b_g + \epsilon
+$$
+
 The idea is to add each estimator to the simple average, all of them computed thanks to the train_set, and then to compare this result (predicted rating) to the actual value observed in the test_set. 
 
 For illustrative purpose, here is the code used to perform this comparison.
