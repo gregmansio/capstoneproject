@@ -1,7 +1,7 @@
 # capstoneproject
 Movie recommandation algorithm
 
-# Important note: this is a non-comprehensive and non-definitive work. It was left as it is in view of respecting course deadlines and other profesionnal comitments.
+## Important note: this is a non-comprehensive and non-definitive work. It was left as it is in view of respecting course deadlines and other profesionnal commitments.
 
 # Overview
 This project is the first of two captsones for the completion of the Data Science Professionnal Certificate offered by HarvardX on the Edx.org platform.
